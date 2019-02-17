@@ -455,6 +455,9 @@ public class Camera2VideoFragment extends Fragment
             }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//            https://www.programcreek.com/java-api-examples/?code=tranquvis/SimpleSmsRemote/SimpleSmsRemote-master/app/src/main/java/tranquvis/simplesmsremote/Utils/Device/CameraUtils.java#
+//            https://myandroidarchive.tistory.com/1
+//            https://metalkin.tistory.com/92
             List<MyCameraInfo> cameras = new ArrayList<>();
             String[] li_cameraId = manager.getCameraIdList();
             for (String cameraId : li_cameraId)
