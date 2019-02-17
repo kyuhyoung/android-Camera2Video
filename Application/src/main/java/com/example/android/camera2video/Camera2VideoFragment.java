@@ -64,6 +64,11 @@ import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+
+import android.support.annotation.RequiresApi;
+import android.os.Build;
+import android.graphics.ImageFormat;
+
 public class Camera2VideoFragment extends Fragment
         implements View.OnClickListener, FragmentCompat.OnRequestPermissionsResultCallback {
 
@@ -93,6 +98,10 @@ public class Camera2VideoFragment extends Fragment
         INVERSE_ORIENTATIONS.append(Surface.ROTATION_90, 180);
         INVERSE_ORIENTATIONS.append(Surface.ROTATION_180, 90);
         INVERSE_ORIENTATIONS.append(Surface.ROTATION_270, 0);
+    }
+
+    public enum LensFacing {
+        FRONT, BACK, EXTERNAL
     }
 
     /**
@@ -422,12 +431,41 @@ public class Camera2VideoFragment extends Fragment
         if (null == activity || activity.isFinishing()) {
             return;
         }
+
+/*/////////////////////////////////////////////////////////////////
+        List<MyCameraInfo> cameras = new ArrayList<>();
+        CameraManager cameraManager =
+                (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+
+        List<String> li_cam = cameraManager.getCameraIdList();
+        for (String cameraId : cameraManager.getCameraIdList()) {
+            CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+            MyCameraInfo cameraInfo = MyCameraInfo.CreateFromCameraCharacteristics(cameraId,
+                    characteristics);
+            cameras.add(cameraInfo);
+        }
+
+*//////////////////////////////////////////////////////////////////
+
         CameraManager manager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
         try {
             Log.d(TAG, "tryAcquire");
             if (!mCameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
                 throw new RuntimeException("Time out waiting to lock camera opening.");
             }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            List<MyCameraInfo> cameras = new ArrayList<>();
+            String[] li_cameraId = manager.getCameraIdList();
+            for (String cameraId : li_cameraId)
+            {
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+                MyCameraInfo cameraInfo = MyCameraInfo.CreateFromCameraCharacteristics(cameraId,
+                        characteristics);
+                cameras.add(cameraInfo);
+            }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
             String cameraId = manager.getCameraIdList()[0];
 
             // Choose the sizes for camera preview and video recording
@@ -758,6 +796,127 @@ public class Camera2VideoFragment extends Fragment
                     .create();
         }
 
+    }
+
+
+
+    public static class MyCameraInfo {
+        private String id;
+        private List<int[]> outputResolutions;
+        private LensFacing lensFacing = null;
+        private boolean autofocusSupport = false;
+        private boolean flashlightSupport = false;
+
+        public MyCameraInfo(String id, List<int[]> outputResolutions) {
+            this.id = id;
+            this.outputResolutions = outputResolutions;
+        }
+
+        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+        public static MyCameraInfo CreateFromCameraCharacteristics(String cameraId,
+                                                                   CameraCharacteristics characteristics) {
+            StreamConfigurationMap configMap =
+                    characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            Size[] outputSizes = configMap.getOutputSizes(ImageFormat.JPEG);
+            List<int[]> outputResolutions = new ArrayList<>();
+            for (Size outputSize : outputSizes) {
+                outputResolutions.add(new int[]{outputSize.getWidth(), outputSize.getHeight()});
+            }
+
+            MyCameraInfo cameraInfo = new MyCameraInfo(cameraId, outputResolutions);
+
+            // supported functionality depends on the supported hardware level
+            switch (characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)) {
+                case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3:
+
+                case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL:
+                case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED:
+                    cameraInfo.setAutofocusSupport(true);
+                case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY:
+                    // only supports camera 1 api features
+                    break;
+            }
+
+            int[] ints = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
+
+            if (characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE))
+                cameraInfo.setFlashlightSupport(true);
+
+            Integer lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
+            if (lensFacing != null) {
+                if (lensFacing == CameraCharacteristics.LENS_FACING_BACK)
+                    cameraInfo.setLensFacing(LensFacing.BACK);
+                else if (lensFacing == CameraCharacteristics.LENS_FACING_FRONT)
+                    cameraInfo.setLensFacing(LensFacing.FRONT);
+                else if (lensFacing == CameraCharacteristics.LENS_FACING_EXTERNAL)
+                    cameraInfo.setLensFacing(LensFacing.EXTERNAL);
+            }
+
+            /*
+            jpeg is always supported
+            boolean isSupported = configMap.isOutputSupportedFor(0x100);
+            */
+
+
+            //TODO add more info
+
+            return cameraInfo;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public List<int[]> getOutputResolutions() {
+            return outputResolutions;
+        }
+
+        public int[] getBiggestOutputSize() {
+            int[] biggest = null;
+            for (int[] outputSize : outputResolutions) {
+                if (biggest == null || (outputSize[0] > biggest[0]
+                        && outputSize[1] > biggest[1]))
+                    biggest = outputSize;
+            }
+
+            return biggest;
+        }
+
+        public boolean isAutofocusSupport() {
+            return autofocusSupport;
+        }
+
+        public void setAutofocusSupport(boolean autofocusSupport) {
+            this.autofocusSupport = autofocusSupport;
+        }
+
+        public boolean isFlashlightSupport() {
+            return flashlightSupport;
+        }
+
+        public void setFlashlightSupport(boolean flashlightSupport) {
+            this.flashlightSupport = flashlightSupport;
+        }
+
+        public LensFacing getLensFacing() {
+            return lensFacing;
+        }
+
+        public void setLensFacing(LensFacing lensFacing) {
+            this.lensFacing = lensFacing;
+        }
+/*
+        public CaptureSettings getDefaultCaptureSettings() {
+            String defaultPhotosPath = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DCIM).getAbsolutePath();
+
+            CaptureSettings captureSettings = new CaptureSettings(id, getBiggestOutputSize(),
+                    CaptureSettings.ImageFormat.JPEG, defaultPhotosPath);
+            captureSettings.setAutofocus(autofocusSupport);
+            captureSettings.setFlashlight(CaptureSettings.FlashlightMode.AUTO);
+            return captureSettings;
+        }
+*/
     }
 
 }
